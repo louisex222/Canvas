@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+    <style>
+        html,body{
+            height: 100%;
+            margin: 0;
+        }
+        #canvas {
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+    <script>
+     let time = 0
+     let updateFPS = 25
+     let bgcolor ='black'
+    
+
+     class Vec{
+         constructor(x,y){
+             this.x = x
+             this.y =y
+         }
+         set(x,y){
+             this.x =x || 0
+             this.y =y || 0
+         }
+         add(v){
+            return  new Vec(this.x+v.x,this.y+v.y)
+         }
+         sub(v){
+             return new Vec(this.x-v.x, this.y-v.y)
+         }
+         mul(s){
+             return new Vec(this.x*s,this.y*s)
+         }
+         move(x,y){
+             this.x += x
+             this.y += y
+         }
+         clone(){
+             return new Vec(this.x,this.y)
+         }
+         equal(){
+             return this.x ==v.x && this.y ==v.y
+         }
+         toString(){
+            return `(${this.x}, ${this.y})`
+         }
+         get length(){
+            return Math.sqrt(this.x*this.x +this.y*this.y)
+         }
+         get angle(){
+             return Math.atans(this.y,this.x)
+         }
+         get unit(){
+             return this.mul(1/this.length)
+         }
+     }
+     class Particles{
+         constructor(args){
+            let def ={
+                p : new Vec(),
+                v : new Vec(1,0),
+                a : new Vec(0,0),
+                r :10,
+                color: 'white'
+            }
+         Object.assign(def,args)
+         Object.assign(this,def)
+         }
+         draw(){
+             ctx.save()
+                ctx.beginPath()
+                ctx.fillStyle = this.color
+                ctx.circle(this.p,this.r)
+                ctx.fill()
+                ctx.restore()
+         }
+         update(){
+            this.p = this.p.add(this.v)
+            this.v = this.v.add(this.a)
+            this.v.move(0,control.ay)
+            this.v = this.v.mul(0.99)
+            this.r *=control.fade
+
+            if(this.p.x +this.r >ww){
+                this.v.x = -Math.abs(this.v.x)
+            }
+            if(this.p.y + this.r >wh){
+                this.v.y = -Math.abs(this.v.y)
+            }
+            if(this.p.x -this.r <0){
+                this.v.x = Math.abs(this.v.x)
+            }
+            if(this.p.y - this.r <0 ){
+                this.v.y = Math.abs(this.v.y)
+            }
+         }
+     }
+     class Forcefield{
+         constructor(args){
+            let def ={
+              p: new Vec(),
+              value: -100,
+              color:'#fff'  
+            }
+            Object.assign(def,args)
+            Object.assign(this,def)
+
+         }
+         draw(){
+            ctx.save()
+                ctx.beginPath()
+                ctx.fillStyle = this.color
+                ctx.circle(this.p,15)
+                ctx.fill()
+            ctx.restore()
+         }
+         effect(particle){
+             let  delta = particle.p.sub(this.p)
+             let  len   =  this.value/(delta.length+1)
+             let force =  delta.unit.mul(len)
+             particle.v.move(force.x,force.y)
+         }
+     }
+     let control ={
+         count :1,
+         ay: 0,
+         fade: 0.99,
+         v: 5,
+         clearparticle: function(){
+             particles = []
+         },
+         clearforce : function(){
+             forcefield = []
+         }
+     }
+     let gui = new dat.GUI()
+     gui.add(control,'count',0,10).onChange(function(){})
+     gui.add(control,'ay',-3,3).step(0.1).onChange(function(value){})
+     gui.add(control,'fade',0.5,0.99).onChange(function(value){})
+     gui.add(control,'v',0,10)
+     gui.add(control,'clearparticle')
+     gui.add(control,'clearforce')
+     
+     let canvas  = document.querySelector('#canvas')
+     let ctx = canvas.getContext('2d')
+    
+     function canvasSize() {
+       ww = canvas.width = window.innerWidth
+       wh = canvas.height = window.innerHeight
+     }
+     ctx.circle = function(pos,r){
+         this.arc(pos.x,pos.y,r,0,Math.PI*2)
+     } 
+     ctx.line =function(v1,v2){
+         this.moveTo(v1.x,v1.y)
+         this.lineTo(v2.x,v2.y)
+     }
+     let particles  = []
+     let forcefield = []
+    // 畫面更新
+     function update(){
+         
+         particles = particles.concat(Array.from({length:control.count},(d,i)=>{
+             return new Particles({
+                 p :  mousepos.clone(),
+                 v :  new Vec(Math.random()*control.v-control.v/2,Math.random()*control.v-control.v/2),
+                 r : Math.random()*50,
+                 color: `rgb(255,${parseInt(Math.random()*255)},${parseInt(Math.random()*255)})`
+             })
+         }))
+         particles.forEach(p=>p.update())
+         let slice = particles.slice()
+         slice.forEach((d,i)=>{
+             forcefield.forEach(f=>f.effect(d))
+            if(d.r <10) {
+            let sp = slice.splice(i,1)
+            delete sp
+            }
+         })
+         
+         particles = slice
+     } 
+     function draw(){
+        ctx.fillStyle =bgcolor
+        ctx.fillRect(0,0,ww,wh)
+
+        forcefield.forEach(f=>f.draw())
+        particles.forEach(p =>p.draw())
+        
+        ctx.fillStyle ='red'
+        ctx.beginPath()
+        ctx.circle(mousepos,3)
+        ctx.fill()
+        
+        ctx.save()
+        ctx.beginPath()
+            ctx.translate(mousepos.x,mousepos.y)
+            ctx.strokeStyle ='red'
+            ctx.line(new Vec(0,20),new Vec(0,-20))
+            ctx.line(new Vec(-20,0),new Vec(20,0))
+            ctx.fillText(mousepos,10,-10)
+            ctx.stroke()
+        ctx.restore()
+
+        requestAnimationFrame(draw)    
+     }
+     function load(){
+        canvasSize()
+        requestAnimationFrame(draw)
+        setInterval(update,1000/updateFPS)
+     }
+     let mousepos = new Vec(0,0)
+     function mousemove(e){
+        mousepos.set(e.x,e.y)
+     }
+     function click(e){
+         mousepos.set(e.x,e.y)
+         forcefield.push(new Forcefield({p: mousepos.clone()}))
+         console.log(mousepos)
+     }
+     window.addEventListener('dblclick',click)
+     window.addEventListener('mousemove',mousemove)
+     window.addEventListener('load',load)
+    </script>
+</body>
+</html>
